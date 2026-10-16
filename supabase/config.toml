@@ -1,0 +1,7 @@
+[functions.admin-manage-user]
+verify_jwt = true
+entrypoint = "./functions/admin-manage-user/index.js"
+
+[functions.verify-clearance]
+verify_jwt = false
+entrypoint = "./functions/verify-clearance/index.js"
