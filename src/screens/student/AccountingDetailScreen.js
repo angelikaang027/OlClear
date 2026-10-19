@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Image, Linking, Modal, Platform, Pressable, R
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, CheckCircle2, Clock3, FileText, UploadCloud, X, ZoomIn, ZoomOut } from 'lucide-react-native';
+import { CheckCircle2, Clock3, FileText, UploadCloud, X, ZoomIn, ZoomOut } from 'lucide-react-native';
 import { createProofPreviewUrl, fetchOfficeProofs, fetchStudentRequest, markClearanceItemSubmitted, uploadOfficeProof } from '../../api/studentApi.js';
 import { supabase } from '../../api/supabase.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -371,7 +371,7 @@ export function AccountingDetailScreen({ navigation, route }) {
 
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <View style={styles.header}>
-      <Pressable onPress={() => navigation.goBack()} style={styles.back} accessibilityRole="button" accessibilityLabel="Go back"><ArrowLeft size={21} color="#FFFFFF" /></Pressable>
+      <Image source={require('../../../assets/olclear-logo.png')} style={styles.headerLogo} resizeMode="contain" accessibilityLabel="OLClear logo" />
       <Text style={styles.headerTitle}>Accounting Office</Text>
       <View style={styles.headerSpace} />
     </View>
@@ -482,7 +482,7 @@ export function AccountingDetailScreen({ navigation, route }) {
         disabled={loading || uploading}
         style={styles.cameraButton}
       ><Text style={styles.cameraButtonText}>TAKE PHOTO WITH CAMERA</Text></Pressable> : null}
-      {status === 'APPROVED' ? <Text style={styles.footerHint}>Accounting has approved your payment proof.</Text> : null}
+      {status === 'APPROVED' ? <Text style={styles.footerHint}>Accounting has approved your Clearance Paper. The other offices are now unlocked.</Text> : null}
     </View>
     <Modal visible={previewModalVisible} transparent animationType="fade" onRequestClose={discardSelectedPhoto}>
       <View style={styles.modalBackdrop}>
@@ -551,7 +551,7 @@ function StatusTimeline({ status, hasProof }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F3F6F1' },
   header: { height: 58, backgroundColor: '#0D3B2E', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
-  back: { width: 40, justifyContent: 'center' }, headerTitle: { flex: 1, color: '#FFFFFF', fontSize: 17, fontWeight: '800' }, headerSpace: { width: 28 },
+  headerLogo: { width: 40, height: 40, marginRight: 10 }, headerTitle: { flex: 1, color: '#FFFFFF', fontSize: 17, fontWeight: '800' }, headerSpace: { width: 28 },
   statusBanner: { minHeight: 72, paddingHorizontal: 20, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   submittedNotice: { marginBottom: 12, padding: 13, borderRadius: 12, backgroundColor: '#FFF3D9', flexDirection: 'row', alignItems: 'center', gap: 9 }, submittedNoticeText: { color: '#6D4B10', flex: 1, fontSize: 12, lineHeight: 17, fontWeight: '800' },
   statusBannerLabel: { color: '#D8E7D8', fontSize: 11, fontWeight: '900', letterSpacing: 0.8 }, statusBannerValueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, statusBannerValue: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },

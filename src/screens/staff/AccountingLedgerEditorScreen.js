@@ -42,9 +42,9 @@ export function AccountingLedgerEditorScreen({ visible, onClose, onSaved }) {
 
       const { data, error: queueError } = await supabase.from('clearance_items').select(`
         id, balance_amount, status,
-        clearance_requests!clearance_request_id!inner (
+        clearance_requests!clearance_items_clearance_request_id_fkey!inner (
           id, student_id, clearance_period_id,
-          users!inner (id, full_name, student_id_number, email, academic_departments(code), programs(code))
+          users!clearance_requests_student_id_fkey!inner (id, full_name, student_id_number, email, academic_departments!users_department_id_fkey(code), programs(code))
         )
       `).eq('office_id', office.id).eq('clearance_requests.clearance_period_id', period.id).order('updated_at', { ascending: false });
       if (queueError) throw queueError;

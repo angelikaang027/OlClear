@@ -31,13 +31,13 @@ export function ClearanceOverrideScreen({ navigation, route, searchQuery, onSear
       if (activationError) throw activationError;
       const { data: activePeriod, error: periodError } = await supabase.from('clearance_periods').select('id').eq('is_active', true).maybeSingle();
       if (periodError) throw periodError;
-      let requestQuery = supabase.from('clearance_requests').select('*, clearance_periods(title, academic_year, semester), clearance_items(*, offices(id, code, name))').order('created_at', { ascending: false }).limit(200);
+      let requestQuery = supabase.from('clearance_requests').select('*, clearance_periods!clearance_requests_clearance_period_id_fkey(title, academic_year, semester), clearance_items!clearance_items_clearance_request_id_fkey(*, offices(id, code, name))').order('created_at', { ascending: false }).limit(200);
       if (activePeriod?.id) requestQuery = requestQuery.or(`clearance_period_id.eq.${activePeriod.id},overall_status.eq.VOIDED`);
       else requestQuery = requestQuery.eq('overall_status', 'VOIDED');
       const { data: rows, error } = await requestQuery;
       if (error) throw error;
       const userIds = [...new Set((rows || []).map((row) => row.student_id).filter(Boolean))];
-      const { data: students, error: studentError } = userIds.length ? await supabase.from('users').select('id, full_name, student_id_number, department_id, program_id, academic_departments(code), programs(code)').in('id', userIds) : { data: [], error: null };
+      const { data: students, error: studentError } = userIds.length ? await supabase.from('users').select('id, full_name, student_id_number, department_id, program_id, academic_departments!users_department_id_fkey(code), programs(code)').in('id', userIds) : { data: [], error: null };
       if (studentError) throw studentError;
       const byId = Object.fromEntries((students || []).map((student) => [student.id, student]));
       setRequests((rows || []).map((row) => {

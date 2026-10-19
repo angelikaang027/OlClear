@@ -87,18 +87,33 @@ export function LoginScreen({ navigation, route, onSignIn }) {
       if (!data?.user?.id) throw new Error('Sign-in did not return an account. Please try again.');
       authenticated = true;
 
-      const { data: profile, error: profileError } = await supabase
+      let { data: profile, error: profileError } = await supabase
         .from('users')
         .select(`
           *,
-          academic_departments (id, code, name),
+          academic_departments!users_department_id_fkey (id, code, name),
           programs (id, code, name, academic_level)
         `)
         .eq('id', data.user.id)
         .single();
       if (profileError || !profile) {
+        // Department/program relations are optional display data. Retry the
+        // essential profile read alone so a PostgREST relationship issue does
+        // not prevent an otherwise valid account from signing in.
+        const fallback = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .maybeSingle();
+        profile = fallback.data;
+        profileError = fallback.error;
+      }
+      if (profileError || !profile) {
         await supabase.auth.signOut();
-        throw new Error('We could not load your account profile. Please contact your administrator.');
+        const detail = profileError?.code
+          ? ` (${profileError.code}: ${profileError.message})`
+          : '';
+        throw new Error(`We could not load your account profile${detail}. Please contact your administrator.`);
       }
 
       const profileRole = String(profile.role || '').toUpperCase();

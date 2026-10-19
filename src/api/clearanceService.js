@@ -35,7 +35,7 @@ export const fetchOrCreateStudentClearance = async (studentId) => {
 
     const { data: request, error: reqError } = await supabase
       .from('clearance_requests')
-      .select('*, clearance_periods(*)')
+      .select('*, clearance_periods!clearance_requests_clearance_period_id_fkey(*)')
       .eq('id', requestId)
       .single();
 

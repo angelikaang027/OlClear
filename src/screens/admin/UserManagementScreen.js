@@ -46,7 +46,7 @@ export function UserManagementScreen({ navigation, embedded = false }) {
     if (!supabase) { setFallback(true); return; }
     const [managedUsersResult, joinedUserResult, departmentResult, officeResult, assignmentResult] = await Promise.all([
       supabase.functions.invoke('admin-manage-user', { body: { action: 'list' } }),
-      supabase.from('users').select('*, academic_departments(id, code, name), programs(id, code, name, academic_level)').order('full_name', { ascending: true }),
+      supabase.from('users').select('*, academic_departments!users_department_id_fkey(id, code, name), programs(id, code, name, academic_level)').order('full_name', { ascending: true }),
       supabase.from('academic_departments').select('id, code, name').order('code'),
       supabase.from('offices').select('id, code, name'),
       supabase.from('staff_office_assignments').select('user_id, office_id, department_id, offices(code, name), academic_departments(code, name)'),
@@ -150,7 +150,12 @@ export function UserManagementScreen({ navigation, embedded = false }) {
       if (data?.assigned !== true) throw new Error('The server did not confirm the staff reassignment. Refresh and try again.');
       setAssignmentByUser((current) => ({ ...current, [selectedStaff]: { user_id: selectedStaff, office_id: selectedOfficeRow.id, department_id: departmentSpecific ? selectedDepartmentRow?.id || null : null, offices: selectedOfficeRow, academic_departments: departmentSpecific ? selectedDepartmentRow : null } }));
       setAssignVisible(false); setSelectedStaff(''); setSelectedOffice(''); setSelectedDepartment('');
-      Alert.alert('Assignment saved', 'The staff member has been reassigned to the selected office.');
+      Alert.alert(
+        data?.identityRestored ? 'Account restored and reassigned' : 'Assignment saved',
+        data?.identityRestored
+          ? 'The staff profile and its existing records are linked to a restored sign-in identity and the selected office. No email was sent. The staff member must use Forgot password to set a new password before signing in.'
+          : 'The staff member has been reassigned to the selected office.',
+      );
     } catch (cause) { Alert.alert('Could not assign staff', cause.message); await load(); }
     finally { setBusy(false); }
   };

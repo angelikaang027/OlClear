@@ -283,6 +283,13 @@ export async function registerAccount(registration) {
     throw new Error('Supabase did not return a user account. Please try again.');
   }
 
+  // Supabase may return a successful, sessionless response for an existing
+  // email to prevent account enumeration. That is not a fresh signup and no
+  // signup verification email is sent, so don't route the user to the code UI.
+  if (!data.session && Array.isArray(authUser.identities) && authUser.identities.length === 0) {
+    throw new Error('An account with this email already exists. Log in or use Forgot password to recover access.');
+  }
+
   const userProfile = {
     id: authUser.id,
     email: normalizedEmail,

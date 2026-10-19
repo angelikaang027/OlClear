@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Award, ChevronRight, FileCheck2, FileText, LockKeyhole, Menu, User } from 'lucide-react-native';
-import { fetchStudentDashboard } from '../../api/studentApi.js';
+import { Award, CalendarDays, ChevronRight, FileCheck2, FileText, LockKeyhole, Menu, User } from 'lucide-react-native';
+import { fetchActiveClearancePeriod, fetchStudentDashboard } from '../../api/studentApi.js';
 import { OFFICES, normalizeOfficeName } from '../../constants/offices.js';
 import { OfficeCard } from '../../components/OfficeCard.js';
 import { isAccountingApproved, isOfficeUnlocked } from '../../utils/clearanceRules.js';
@@ -19,6 +19,8 @@ export function HomeScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [clearancePeriod, setClearancePeriod] = useState(null);
+  const [periodStatusError, setPeriodStatusError] = useState(false);
   const itemStatusRef = useRef({});
 
   const load = useCallback(async (isRefresh = false) => {
@@ -36,6 +38,12 @@ export function HomeScreen({ navigation, route }) {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+    try {
+      setClearancePeriod(await fetchActiveClearancePeriod());
+      setPeriodStatusError(false);
+    } catch (_cause) {
+      setPeriodStatusError(true);
     }
   }, [user]);
 
@@ -94,6 +102,11 @@ export function HomeScreen({ navigation, route }) {
   const academicLevel = String(profile.academic_level || user?.user_metadata?.academic_level || 'UNDERGRADUATE').replaceAll('_', ' ');
   const department = profile.academic_departments?.code || profile.department_code || '';
   const studentId = profile.student_id_number || 'Not provided';
+  const formatPeriodDate = (date) => {
+    if (!date) return '';
+    const [yearPart, monthPart, dayPart] = date.split('-').map(Number);
+    return new Date(yearPart, monthPart - 1, dayPart).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   const openOffice = (office) => {
     const item = itemForOffice(office);
@@ -128,6 +141,20 @@ export function HomeScreen({ navigation, route }) {
           {!!department && <Text style={styles.studentMeta}>{department}</Text>}
         </View>
         <View style={styles.avatar}><User size={30} color={GREEN} strokeWidth={2.2} /></View>
+      </View>
+
+      <View style={[styles.periodCard, clearancePeriod ? styles.periodOpen : periodStatusError ? styles.periodUnknown : styles.periodClosed]}>
+        <View style={styles.periodIcon}><CalendarDays size={21} color={clearancePeriod ? '#17643C' : periodStatusError ? '#695C34' : '#657369'} /></View>
+        <View style={styles.periodCopy}>
+          <Text style={[styles.periodTitle, clearancePeriod ? styles.periodOpenText : periodStatusError ? styles.periodUnknownText : styles.periodClosedText]}>
+            {clearancePeriod ? 'CLEARANCE PERIOD OPEN' : periodStatusError ? 'PERIOD STATUS UNAVAILABLE' : 'NO OPEN CLEARANCE PERIOD'}
+          </Text>
+          <Text style={styles.periodSubtitle}>
+            {clearancePeriod
+              ? `${clearancePeriod.title || clearancePeriod.semester || 'Clearance'}${clearancePeriod.academic_year ? ` · AY ${clearancePeriod.academic_year}` : ''}${clearancePeriod.start_date || clearancePeriod.end_date ? `\n${formatPeriodDate(clearancePeriod.start_date)} – ${formatPeriodDate(clearancePeriod.end_date)}` : ''}`
+              : periodStatusError ? 'Pull down to refresh and check again.' : 'You can submit clearance proof when the administrator opens a period.'}
+          </Text>
+        </View>
       </View>
 
       {error ? <Pressable onPress={() => Alert.alert('Could not load clearance', error)} style={styles.errorCard}><Text style={styles.errorText}>{error}</Text><Text style={styles.retryText} onPress={() => load()}>Tap to retry</Text></Pressable> : null}
@@ -204,6 +231,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F2F5F0' }, content: { paddingBottom: 20 },
   topBar: { minHeight: 58, backgroundColor: GREEN, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 }, topTitle: { color: '#FFFFFF', fontSize: 19, fontWeight: '800' }, menuButton: { width: 40, height: 40, alignItems: 'flex-end', justifyContent: 'center' },
   profileCard: { marginHorizontal: 17, marginTop: 17, backgroundColor: '#1B4332', borderRadius: 18, padding: 17, minHeight: 142, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#09291D', shadowOpacity: 0.16, shadowRadius: 11, shadowOffset: { width: 0, height: 5 }, elevation: 5 }, profileInfo: { flex: 1, paddingRight: 12 }, badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 11 }, programBadge: { color: GREEN, backgroundColor: '#DDF36B', fontSize: 11, fontWeight: '900', paddingVertical: 5, paddingHorizontal: 9, borderRadius: 8 }, levelBadge: { color: '#E9F4EB', borderWidth: 1, borderColor: '#71907B', fontSize: 9, fontWeight: '800', paddingVertical: 5, paddingHorizontal: 8, borderRadius: 8 }, studentName: { color: '#FFFFFF', fontSize: 19, lineHeight: 24, fontWeight: '800' }, studentMeta: { color: '#D4E2D8', fontSize: 12, marginTop: 5 }, avatar: { width: 57, height: 57, borderRadius: 29, backgroundColor: '#DDF36B', alignItems: 'center', justifyContent: 'center' },
+  periodCard: { marginHorizontal: 17, marginTop: 12, borderRadius: 13, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1 }, periodOpen: { backgroundColor: '#E7F4E9', borderColor: '#A9D2B2' }, periodClosed: { backgroundColor: '#F0F2EF', borderColor: '#D9DFD8' }, periodUnknown: { backgroundColor: '#F8F3E3', borderColor: '#E5D7A8' }, periodIcon: { width: 39, height: 39, borderRadius: 12, backgroundColor: '#FFFFFFB8', alignItems: 'center', justifyContent: 'center' }, periodCopy: { flex: 1 }, periodTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 0.45 }, periodOpenText: { color: '#17643C' }, periodClosedText: { color: '#59665C' }, periodUnknownText: { color: '#695C34' }, periodSubtitle: { color: '#526257', fontSize: 12, lineHeight: 17, marginTop: 4 },
   errorCard: { marginHorizontal: 17, marginTop: 12, padding: 13, backgroundColor: '#FDEBE8', borderRadius: 12 }, errorText: { color: '#9D382D', fontSize: 13 }, retryText: { color: '#7A2A23', fontWeight: '800', marginTop: 5 }, loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingVertical: 15 }, loadingText: { color: '#68766B', fontSize: 13 },
   accountingAlert: { marginHorizontal: 17, marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: '#FFF3D9', borderColor: '#E6C77D', borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }, accountingAlertText: { flex: 1, color: '#6D4B10', fontSize: 12, lineHeight: 17, fontWeight: '700' },
   progressCard: { marginHorizontal: 17, marginTop: 16, backgroundColor: '#14744B', borderRadius: 16, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 12 }, progressIcon: { width: 45, height: 45, borderRadius: 14, backgroundColor: '#0D633F', alignItems: 'center', justifyContent: 'center' }, progressCopy: { flex: 1 }, progressTitle: { color: '#DDF36B', fontSize: 13, letterSpacing: 0.7, fontWeight: '900' }, progressSubtitle: { color: '#F0F8F1', fontSize: 12, marginTop: 4 }, progressTrack: { height: 5, overflow: 'hidden', borderRadius: 3, backgroundColor: '#78A98E', marginTop: 10 }, progressFill: { height: 5, backgroundColor: '#DDF36B', borderRadius: 3 },

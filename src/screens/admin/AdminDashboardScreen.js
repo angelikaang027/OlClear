@@ -100,7 +100,7 @@ export function AdminDashboardScreen({ navigation }) {
   const fetchActivityLogs = useCallback(async () => {
     if (!supabase) { setActivityFallback(true); return; }
     try {
-      const { data, error } = await supabase.from('clearance_items').select('id, status, updated_at, remarks, offices(code, name), clearance_requests(users(full_name, student_id_number))').order('updated_at', { ascending: false }).limit(6);
+      const { data, error } = await supabase.from('clearance_items').select('id, status, updated_at, remarks, offices(code, name), clearance_requests!clearance_items_clearance_request_id_fkey(users!clearance_requests_student_id_fkey(full_name, student_id_number))').order('updated_at', { ascending: false }).limit(6);
       if (error) throw error;
       const activity = (data || []).map((item) => {
         const request = getRelated(item.clearance_requests);
@@ -139,8 +139,8 @@ export function AdminDashboardScreen({ navigation }) {
         return;
       }
       const [{ data: requests, error }, { data: students, error: studentsError }, { data: departments, error: departmentsError }] = await Promise.all([
-        supabase.from('clearance_requests').select('id, student_id, clearance_items(id, status, offices(code, name))').eq('clearance_period_id', period.id).neq('overall_status', 'VOIDED'),
-        supabase.from('users').select('id, role::text, academic_level::text, department_id, academic_departments(code)').eq('role', 'STUDENT'),
+        supabase.from('clearance_requests').select('id, student_id, clearance_items!clearance_items_clearance_request_id_fkey(id, status, offices(code, name))').eq('clearance_period_id', period.id).neq('overall_status', 'VOIDED'),
+        supabase.from('users').select('id, role::text, academic_level::text, department_id, academic_departments!users_department_id_fkey(code)').eq('role', 'STUDENT'),
         supabase.from('academic_departments').select('id, code'),
       ]);
       if (error) throw error;

@@ -60,10 +60,10 @@ export function StaffOfficeQueueScreen({ navigation, route }) {
 
       const { data, error: queueError } = await supabase.from('clearance_items').select(`
         id, status, remarks, updated_at,
-        clearance_requests!clearance_request_id!inner (
+        clearance_requests!clearance_items_clearance_request_id_fkey!inner (
           id, student_id, academic_level, clearance_period_id,
-          users!inner (id, full_name, student_id_number, email, department_id, program_id,
-            academic_departments(code, name), programs(code, name))
+          users!clearance_requests_student_id_fkey!inner (id, full_name, student_id_number, email, department_id, program_id,
+            academic_departments!users_department_id_fkey(code, name), programs(code, name))
         )
       `).eq('office_id', officeRow.id).eq('clearance_requests.clearance_period_id', activePeriod.id).order('updated_at', { ascending: false });
       if (queueError) throw queueError;

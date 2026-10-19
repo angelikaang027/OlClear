@@ -22,7 +22,7 @@ export async function fetchOfficePendingProofs(staffProfile = {}, { clearanceIte
   if (role === 'ADMIN') {
     const { data, error } = await supabase
       .from('clearance_proofs')
-      .select('*, clearance_items!clearance_item_id(*)')
+      .select('*, clearance_items!clearance_proofs_clearance_item_id_fkey(*)')
       .order('uploaded_at', { ascending: false });
     if (error) throw error;
     return attachPreviewUrls(data || []);
@@ -37,7 +37,7 @@ export async function fetchOfficePendingProofs(staffProfile = {}, { clearanceIte
   const runQuery = async (itemFields, filterField, filterValue) => {
     let query = supabase
       .from('clearance_proofs')
-      .select(`*, clearance_items!clearance_item_id!inner(${itemFields})`)
+      .select(`*, clearance_items!clearance_proofs_clearance_item_id_fkey!inner(${itemFields})`)
       .order('uploaded_at', { ascending: false });
     query = query.eq(`clearance_items.${filterField}`, filterValue);
     if (clearanceItemIds.length) query = query.in('clearance_items.id', clearanceItemIds);

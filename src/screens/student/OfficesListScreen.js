@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { fetchStudentRequest } from '../../api/studentApi.js';
+import { supabase } from '../../api/supabase.js';
 import { OFFICES, normalizeOfficeName } from '../../constants/offices.js';
 import { OfficeCard } from '../../components/OfficeCard.js';
 import { isOfficeUnlocked } from '../../utils/clearanceRules.js';
@@ -12,6 +13,7 @@ import { useAuth } from '../../context/AuthContext.js';
 
 export function OfficesListScreen({ navigation }) {
   const { user } = useAuth();
+  const userId = user?.id;
   const [request, setRequest] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,7 +25,7 @@ export function OfficesListScreen({ navigation }) {
     else setLoading(true);
     setError('');
     try {
-      const result = user?.id ? await fetchStudentRequest(user.id) : null;
+      const result = userId ? await fetchStudentRequest(userId) : null;
       setRequest(result);
       setItems(result?.clearance_items || []);
     } catch (cause) {
@@ -32,12 +34,31 @@ export function OfficesListScreen({ navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [userId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
-  const itemForOffice = (office) => items.find((item) => item.office_code === office.code)
-    || items.find((item) => normalizeOfficeName(item.office_name) === normalizeOfficeName(office.name));
-  const approved = OFFICES.filter((office) => itemForOffice(office)?.status === 'APPROVED').length;
+  useEffect(() => {
+    const requestId = request?.id;
+    if (!supabase || !userId || !requestId) return undefined;
+
+    const channel = supabase.channel(`student-office-checklist-${requestId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'clearance_items',
+        filter: `clearance_request_id=eq.${requestId}`,
+      }, () => load(true))
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [request?.id, userId, load]);
+
+  const itemForOffice = (office) => {
+    const matching = items.filter((item) => item.office_code === office.code
+      || normalizeOfficeName(item.office_name) === normalizeOfficeName(office.name));
+    return matching.find((item) => String(item.status || '').toUpperCase() === 'APPROVED') || matching[0];
+  };
+  const approved = OFFICES.filter((office) => String(itemForOffice(office)?.status || '').toUpperCase() === 'APPROVED').length;
   const percentage = Math.round((approved / OFFICES.length) * 100);
 
   return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -56,7 +77,7 @@ export function OfficesListScreen({ navigation }) {
         return <OfficeCard
           key={office.code}
           office={office}
-          status={item?.status || 'PENDING'}
+          status={String(item?.status || 'PENDING').toUpperCase()}
           isLocked={!isOfficeUnlocked(office.code, items)}
           index={index}
           remark={item?.remarks || item?.remark}

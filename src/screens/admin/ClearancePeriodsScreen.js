@@ -63,7 +63,7 @@ export function ClearancePeriodsScreen({ navigation, embedded = false }) {
     const [periodResult, studentResult, requestResult] = await Promise.all([
       supabase.from('clearance_periods').select('*').order('created_at', { ascending: false }),
       supabase.from('users').select('id', { count: 'exact', head: true }).eq('role', 'STUDENT'),
-      supabase.from('clearance_requests').select('clearance_period_id, clearance_items(status)'),
+      supabase.from('clearance_requests').select('clearance_period_id, clearance_items!clearance_items_clearance_request_id_fkey(status)'),
     ]);
     if (periodResult.error) { setFallback(true); return; }
     setError('');

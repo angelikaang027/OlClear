@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-api-version',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -128,9 +128,65 @@ Deno.serve(async (request) => {
     if (!userId) return response({ error: 'A target user ID is required.' }, 400);
     if (userId === callerData.user.id && ['deactivate', 'delete'].includes(action)) return response({ error: 'You cannot suspend or delete your own administrator account.' }, 400);
 
+    if (action === 'delete') {
+      // Remove the Auth identity first. Clean-install schemas cascade this to
+      // public.users; older deployed schemas may lack that FK and leave an
+      // orphan profile behind, so explicitly remove the profile as well.
+      const { data: targetResult, error: targetError } = await adminClient.auth.admin.getUserById(userId);
+      if (targetError && targetError.status !== 404) throw targetError;
+      if (targetResult?.user) {
+        const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(userId);
+        if (authDeleteError) throw authDeleteError;
+      }
+
+      const { error: profileDeleteError } = await adminClient.from('users').delete().eq('id', userId);
+      if (profileDeleteError) {
+        throw new Error(`Auth account is deleted, but its OLClear profile could not be removed: ${profileDeleteError.message}`);
+      }
+      return response({ userId, deleted: true });
+    }
+
     const { data: targetResult, error: targetError } = await adminClient.auth.admin.getUserById(userId);
-    if (targetError || !targetResult?.user) return response({ error: 'The selected Auth user was not found.' }, 404);
-    const target = targetResult.user;
+    if (targetError && targetError.status !== 404) throw targetError;
+    let target = targetResult?.user || null;
+    let identityRestored = false;
+    if (!target && action === 'assign') {
+      const { data: orphanProfile, error: orphanProfileError } = await adminClient
+        .from('users')
+        .select('id, email, full_name, employee_id_number, role, status')
+        .eq('id', userId)
+        .maybeSingle();
+      if (orphanProfileError) throw orphanProfileError;
+      if (!orphanProfile || String(orphanProfile.role || '').toUpperCase() !== 'STAFF') {
+        return response({ error: 'The selected Auth user was not found, and its staff profile could not be restored.' }, 404);
+      }
+      if (String(orphanProfile.status || '').toUpperCase() !== 'ACTIVE') {
+        return response({ error: 'This staff profile has no Auth identity and is not active. Activate or approve it before reassignment.' }, 409);
+      }
+
+      // Preserve the existing profile UUID so assignments and historical records
+      // remain attached. The random password is never returned or emailed; the
+      // staff member must use the normal password recovery flow to sign in.
+      const temporaryPassword = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      const { data: restoredAuth, error: restoreAuthError } = await adminClient.auth.admin.createUser({
+        id: orphanProfile.id,
+        email: orphanProfile.email,
+        password: temporaryPassword,
+        email_confirm: true,
+        user_metadata: {
+          full_name: orphanProfile.full_name,
+          role: 'STAFF',
+          employee_id_number: orphanProfile.employee_id_number,
+        },
+      });
+      if (restoreAuthError) {
+        return response({ error: `The staff profile was found, but its Auth identity could not be restored: ${restoreAuthError.message}` }, 409);
+      }
+      target = restoredAuth?.user || null;
+      if (!target?.id) return response({ error: 'Supabase Auth did not confirm the restored staff identity.' }, 500);
+      identityRestored = true;
+    }
+    if (!target) return response({ error: 'The selected Auth user was not found.' }, 404);
 
     if (action === 'assign') {
       const { data: profile, error: staffProfileError } = await adminClient
@@ -183,7 +239,7 @@ Deno.serve(async (request) => {
         const { error: insertError } = await adminClient.from('staff_office_assignments').insert({ user_id: userId, ...assignment });
         if (insertError) throw insertError;
       }
-      return response({ userId, assigned: true, officeCode: office.code, departmentId: assignment.department_id });
+      return response({ userId, assigned: true, officeCode: office.code, departmentId: assignment.department_id, identityRestored });
     }
 
     if (action === 'approve') {
@@ -266,12 +322,6 @@ Deno.serve(async (request) => {
         return response({ error: 'This staff account was already approved or changed. Its previous office assignment was restored; refresh and try again.' }, 409);
       }
       return response({ userId, approved: true, officeCode: office.code });
-    }
-
-    if (action === 'delete') {
-      const { error } = await adminClient.auth.admin.deleteUser(userId);
-      if (error) throw error;
-      return response({ userId, deleted: true });
     }
 
     if (action === 'deactivate' || action === 'activate') {

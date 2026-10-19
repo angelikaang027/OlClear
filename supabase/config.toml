@@ -1,7 +1,11 @@
 [functions.admin-manage-user]
-verify_jwt = true
+verify_jwt = false
 entrypoint = "./functions/admin-manage-user/index.js"
 
 [functions.verify-clearance]
 verify_jwt = false
 entrypoint = "./functions/verify-clearance/index.js"
+
+[auth.email.template.recovery]
+subject = "Your OLClear password reset code"
+content_path = "./supabase/templates/recovery.html"

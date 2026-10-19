@@ -89,7 +89,7 @@ export async function fetchStudentProfile(userId) {
     .from('users')
     .select(`
       *,
-      academic_departments (id, code, name),
+      academic_departments!users_department_id_fkey (id, code, name),
       programs (id, code, name, academic_level)
     `)
     .eq('id', userId)
@@ -153,6 +153,19 @@ export async function fetchStudentDashboard(userId) {
     .slice(0, 8);
 
   return { request, items, activities };
+}
+
+export async function fetchActiveClearancePeriod() {
+  requireSupabase();
+  const { data, error } = await supabase
+    .from('clearance_periods')
+    .select('id, title, academic_year, semester, start_date, end_date, status, is_active')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
 }
 
 export async function fetchStudentRequest(userId) {
@@ -268,42 +281,31 @@ export async function uploadOfficeProof({ file, item, userId, documentType = nul
     ...(documentType ? { document_type: documentType } : {}),
   };
 
-  // Some deployed schemas call the MIME field `mime_type`, some use
-  // `file_type`, and older schemas may not store either. Retry only when
-  // PostgREST explicitly identifies a missing metadata/reference column.
-  let insertPayload = { ...proofPayload };
-  let result;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    result = await supabase.from('clearance_proofs').insert(insertPayload).select('*').single();
-    if (!result.error) break;
-
-    const missingReferenceColumn = ['clearance_item_id', 'item_id'].find((column) =>
-      Object.prototype.hasOwnProperty.call(insertPayload, column)
-        && isMissingProofReferenceColumn(result.error, column),
-    );
-    if (missingReferenceColumn) {
-      const { [missingReferenceColumn]: _missingReference, ...remainingPayload } = insertPayload;
-      insertPayload = remainingPayload;
-      continue;
-    }
-
-    const optionalMetadataColumns = ['mime_type', 'file_type', 'document_type', 'file_url', 'storage_path', 'uploaded_at'];
-    const missingColumn = optionalMetadataColumns.find((column) =>
-      Object.prototype.hasOwnProperty.call(insertPayload, column)
-        && isMissingProofReferenceColumn(result.error, column),
-    );
-    if (missingColumn) {
-      const { [missingColumn]: _missingMetadata, ...remainingPayload } = insertPayload;
-      insertPayload = remainingPayload;
-      continue;
-    }
-    break;
-  }
-  if (result.error) {
+  const { data: proofId, error: insertError } = await supabase.rpc('student_create_clearance_proof', {
+    p_clearance_item_id: itemId,
+    p_storage_path: storagePath,
+    p_file_name: fileName,
+    p_mime_type: contentType,
+    p_document_type: documentType || 'GENERAL',
+  });
+  if (insertError) {
     await supabase.storage.from('clearance_proofs').remove([storagePath]);
-    throw result.error;
+    if (/not eligible for proof submission/i.test(String(insertError.message || ''))) {
+      try {
+        const period = await fetchActiveClearancePeriod();
+        if (!period) throw new Error('There is no open clearance period right now. You can submit proof when the administrator opens one.');
+        const detail = officeCode === 'ACCOUNTING'
+          ? 'Refresh your checklist and try again. If this continues, contact the administrator to check your account and clearance item.'
+          : 'Other offices accept proof after Accounting approves your clearance paper. Refresh your checklist and try again.';
+        throw new Error(`The clearance period is open, but this item cannot accept proof yet. ${detail}`);
+      } catch (periodError) {
+        if (/There is no open clearance period|The clearance period is open/.test(String(periodError?.message || ''))) throw periodError;
+        // Keep the original server error if the period status cannot be checked.
+      }
+    }
+    throw insertError;
   }
-  return result.data;
+  return { ...proofPayload, id: proofId };
 }
 
 export async function markClearanceItemSubmitted(clearanceItemId) {

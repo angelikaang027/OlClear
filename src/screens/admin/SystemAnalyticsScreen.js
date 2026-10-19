@@ -20,7 +20,7 @@ export function SystemAnalyticsScreen({ navigation, embedded = false }) {
   const load = useCallback(async () => {
     if (!supabase) { setFallback(true); return; }
     const [requestResult, userResult, departmentResult] = await Promise.all([
-      supabase.from('clearance_requests').select('id, student_id, clearance_type, clearance_items(status, offices(code, name))').neq('overall_status', 'VOIDED'),
+      supabase.from('clearance_requests').select('id, student_id, clearance_type, clearance_items!clearance_items_clearance_request_id_fkey(status, offices(code, name))').neq('overall_status', 'VOIDED'),
       supabase.from('users').select('id, role, academic_level, department_id'),
       supabase.from('academic_departments').select('id, code, name').order('code'),
     ]);
